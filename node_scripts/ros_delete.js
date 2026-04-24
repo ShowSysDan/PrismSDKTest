@@ -4,13 +4,10 @@
  *
  * Usage: node ros_delete.js '<json_args>'
  *
- * Required args:
- *   event_id - int
- *   item_id  - int  (Prism-assigned ROS item ID)
+ * Required args:  event_id, item_id (Prism-assigned ROS item ID)
  */
 
-const sdk = require('@prismfm/prism-sdk');
-const { getPrismSDK } = sdk.default || sdk;
+const { getPrismAndXsrf } = require('./prism_write_auth');
 
 async function main() {
   const args = JSON.parse(process.argv[2] || '{}');
@@ -18,16 +15,22 @@ async function main() {
     throw new Error('event_id and item_id are required');
   }
 
-  const prism = getPrismSDK({});
+  const { prism, xsrfToken } = await getPrismAndXsrf();
+
   let result;
   try {
     result = await prism.callPrismApi(
       `/events/${args.event_id}/run-of-show/${args.item_id}`,
-      { method: 'DELETE' }
+      {
+        method: 'DELETE',
+        headers: {
+          ...(xsrfToken ? { 'x-xsrf-token': xsrfToken } : {}),
+        },
+      }
     );
   } catch (e) {
-    // 204 No Content responses may parse as empty — treat as success
-    if (e.message && /empty|JSON/i.test(e.message)) {
+    // 204 No Content may surface as an empty-body JSON parse error
+    if (e.message && /empty|JSON|token/i.test(e.message)) {
       result = null;
     } else {
       throw e;
