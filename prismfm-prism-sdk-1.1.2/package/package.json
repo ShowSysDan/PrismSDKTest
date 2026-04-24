@@ -1,0 +1,103 @@
+{
+	"name": "@prismfm/prism-sdk",
+	"version": "1.1.2",
+	"description": "Public SDK for interacting with the Prism.fm API",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/prismfm/prism-frontend.git",
+		"directory": "prism-sdk-package"
+	},
+	"main": "build/dist/index.js",
+	"types": "build/dist/index.d.ts",
+	"files": [
+		"build/**/*",
+		"sample-scripts/**/*.ts",
+		"README.md"
+	],
+	"prism": {
+		"type": "library",
+		"determineIfChangedStrategy": {
+			"type": "paths-changed",
+			"paths": [
+				"prism-sdk-package/src/**/*.ts",
+				"prism-sdk-package/index.ts"
+			]
+		},
+		"versioningStrategy": "manual",
+		"copyEmsRollupVersion": false,
+		"publish": [
+			{
+				"name": "public-sdk",
+				"buildCommand": "npm run build:public",
+				"s3Bucket": "prism-public-sdk"
+			},
+			{
+				"name": "internal-sdk",
+				"buildCommand": "npm run build",
+				"github": true
+			}
+		]
+	},
+	"scripts": {
+		"prebuild": "SDK_BUILD_TYPE=${SDK_BUILD_TYPE:-internal} npx ts-node ./scripts/generatePrismEventRollupDts.ts",
+		"prebuild:public": "SDK_BUILD_TYPE=public npx ts-node ./scripts/generatePrismEventRollupDts.ts",
+		"postbuild": "cp src/lib/PrismEventRollup.d.ts build/dist/PrismEventRollup.d.ts && cp package.json build/dist/package.json",
+		"postbuild:public": "cp src/lib/PrismEventRollup.d.ts build/dist/PrismEventRollup.d.ts && cp package.json build/dist/package.json && npx ts-node ./scripts/prepare-public-package-json.ts",
+		"build": "rm -rf build && npm run prebuild && SDK_BUILD_TYPE=${SDK_BUILD_TYPE:-internal} node build-esbuild.js && SDK_BUILD_TYPE=${SDK_BUILD_TYPE:-internal} node build-declarations.js && npm run postbuild",
+		"build:public:no-obfuscate": "rm -rf build && npm run prebuild:public && SDK_BUILD_TYPE=public node build-esbuild.js && SDK_BUILD_TYPE=public node build-declarations.js && npm run postbuild:public",
+		"build:public:debug": "rm -rf build && npm run prebuild:public && SDK_BUILD_TYPE=public-with-debug node build-esbuild.js && SDK_BUILD_TYPE=public-with-debug node build-declarations.js && npm run postbuild:public",
+		"build:public": "npm run build:public:no-obfuscate && npm run minify-obfuscate",
+		"build:public-dev": "rm -rf build && npm run prebuild:public && SDK_BUILD_TYPE=public-dev node build-esbuild.js && SDK_BUILD_TYPE=public-dev node build-declarations.js && npm run postbuild:public",
+		"minify-obfuscate": "npx ts-node ./scripts/minify-obfuscate.ts",
+		"test": "jest && npm run test:build && npm run test:backend-url",
+		"test:jest": "jest",
+		"test:watch": "jest --watch",
+		"test:coverage": "jest --coverage",
+		"test:build": "node test-build.js",
+		"test:backend-url": "node test-backend-url.js",
+		"pack": "npm run build && mkdir -p packed && npm pack --pack-destination packed",
+		"pack:public": "npm run build:public && mkdir -p packed && npm pack --pack-destination packed",
+		"build-and-pack-all": "node build-and-pack-all-for-inspection.js",
+		"lint": "eslint \"src/**/*.ts\"",
+		"lint-fix": "npm run lint -- --fix",
+		"publish-package": "prism-cli-publish-package",
+		"publish:public-sdk": "prism-cli-publish-package --target public-sdk",
+		"publish:npm-package": "prism-cli-publish-package --target internal-sdk"
+	},
+	"author": "Prism Engineering <engineering@prism.fm>",
+	"dependencies": {
+		"@apollo/client": "3.14.1",
+		"crypto-hash": "3.1.0",
+		"dayjs": "1.11.13",
+		"debug": "4.3.4",
+		"lodash": "4.17.21",
+		"otplib": "12.0.1",
+		"p-queue": "6.6.2"
+	},
+	"devDependencies": {
+		"@types/debug": "4.1.7",
+		"@types/express": "5.0.3",
+		"@types/jest": "30.0.0",
+		"@types/lodash": "4.14.195",
+		"@types/moment": "2.11.29",
+		"@types/multer": "2.1.0",
+		"@types/node": "22.14.0",
+		"@types/react": "18.2.0",
+		"@typescript-eslint/eslint-plugin": "8.57.2",
+		"@typescript-eslint/parser": "8.57.2",
+		"dts-bundle-generator": "9.5.1",
+		"esbuild": "0.25.10",
+		"eslint": "9.39.2",
+		"express": "5.2.0",
+		"glob": "10.5.0",
+		"javascript-obfuscator": "4.0.2",
+		"jest": "29.5.0",
+		"moment": "2.30.1",
+		"multer": "2.1.1",
+		"terser": "5.26.0",
+		"ts-jest": "29.1.0",
+		"ts-node": "10.9.0",
+		"typescript": "5.8.3",
+		"typescript-eslint": "8.57.2"
+	}
+}

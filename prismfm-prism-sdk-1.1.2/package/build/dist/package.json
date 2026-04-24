@@ -1,0 +1,26 @@
+{
+	"name": "@prismfm/prism-sdk",
+	"version": "1.1.2",
+	"description": "Public SDK for interacting with the Prism.fm API",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/prismfm/prism-frontend.git",
+		"directory": "prism-sdk-package"
+	},
+	"main": "build/dist/index.js",
+	"types": "build/dist/index.d.ts",
+	"files": [
+		"build/**/*",
+		"sample-scripts/**/*.ts",
+		"README.md"
+	],
+	"author": "Prism Engineering <engineering@prism.fm>",
+	"dependencies": {
+		"@apollo/client": "3.14.1",
+		"crypto-hash": "3.1.0",
+		"dayjs": "1.11.13",
+		"debug": "4.3.4",
+		"lodash": "4.17.21",
+		"p-queue": "6.6.2"
+	}
+}
