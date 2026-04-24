@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<h1>Dashboard</h1>
+
+{% if not token_set %}
+<div class="alert alert-error">
+  No API token configured.
+  <a href="/settings" style="color:inherit;font-weight:700;">Go to Settings &rarr;</a>
+  to add your Prism token before syncing.
+</div>
+{% endif %}
+
+<!-- ── Stats ──────────────────────────────────────────────────────────────── -->
+<div class="stat-grid">
+  <div class="stat-box">
+    <div class="num">{{ stats.venues_count }}</div>
+    <div class="lbl">Venues</div>
+  </div>
+  <div class="stat-box">
+    <div class="num">{{ stats.events_count }}</div>
+    <div class="lbl">Events (cached)</div>
+  </div>
+  <div class="stat-box">
+    <div class="num">{{ stats.run_of_show_items_count }}</div>
+    <div class="lbl">Run of Show Items</div>
+  </div>
+</div>
+
+{% if last_sync %}
+<p class="text-muted" style="font-size:.82rem;margin-bottom:1.5rem;">Last events sync: {{ last_sync }}</p>
+{% else %}
+<p class="text-muted" style="font-size:.82rem;margin-bottom:1.5rem;">Events not yet synced.</p>
+{% endif %}
+
+<!-- ── Quick Sync ─────────────────────────────────────────────────────────── -->
+<div class="card">
+  <h2>Quick Sync</h2>
+  <p style="font-size:.88rem;color:#64748b;margin-bottom:1rem;">
+    Pull fresh data from the Prism API into the local cache.
+    Sync venues first, then events, then run of show.
+  </p>
+
+  <form method="POST" action="/sync-ui/venues" style="display:inline;">
+    <button class="btn btn-success btn-sm">Sync Venues</button>
+  </form>
+
+  <form method="POST" action="/sync-ui/events" style="display:inline;margin-left:.5rem;">
+    <input type="hidden" name="days" value="30">
+    <button class="btn btn-success btn-sm">Sync Events (30 days)</button>
+  </form>
+
+  <form method="POST" action="/sync-ui/run-of-show" style="display:inline;margin-left:.5rem;">
+    <button class="btn btn-success btn-sm">Sync Run of Show (30 days)</button>
+  </form>
+</div>
+
+<!-- ── API Quick Links ────────────────────────────────────────────────────── -->
+<div class="card">
+  <h2>API Endpoints</h2>
+  <table style="width:100%;font-size:.88rem;border-collapse:collapse;">
+    <thead>
+      <tr style="background:#f8fafc;">
+        <th style="text-align:left;padding:.5rem .75rem;border-bottom:1px solid #e2e8f0;">Method</th>
+        <th style="text-align:left;padding:.5rem .75rem;border-bottom:1px solid #e2e8f0;">Endpoint</th>
+        <th style="text-align:left;padding:.5rem .75rem;border-bottom:1px solid #e2e8f0;">Description</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for method, path, desc in endpoints %}
+      <tr>
+        <td style="padding:.4rem .75rem;border-bottom:1px solid #f1f5f9;">
+          <code style="background:{% if method=='GET' %}#dbeafe{% elif method=='POST' %}#d1fae5{% else %}#fee2e2{% endif %};color:#1e293b;">{{ method }}</code>
+        </td>
+        <td style="padding:.4rem .75rem;border-bottom:1px solid #f1f5f9;">
+          {% if method == 'GET' %}
+            <a href="{{ path }}" target="_blank" style="font-family:monospace;color:#7c3aed;font-size:.85rem;">{{ path }}</a>
+          {% else %}
+            <span style="font-family:monospace;font-size:.85rem;color:#334155;">{{ path }}</span>
+          {% endif %}
+        </td>
+        <td style="padding:.4rem .75rem;border-bottom:1px solid #f1f5f9;color:#64748b;">{{ desc }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

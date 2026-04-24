@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+<h1>Settings</h1>
+
+<!-- ── API Token ─────────────────────────────────────────────────────────── -->
+<div class="card">
+  <h2>Prism FM API Token</h2>
+
+  <p style="font-size:.9rem;color:#475569;margin-bottom:1rem;">
+    Generate your token in Prism &rarr; <strong>Settings &rarr; Developer</strong>.
+    Required scopes: <code>read-events</code>, <code>read-venues</code>,
+    <code>read-run-of-show</code>.
+    The token is stored in the local SQLite database and takes effect immediately
+    — no restart required.
+  </p>
+
+  {% if current_token_masked %}
+    <div class="alert alert-info">
+      Current token: <span class="mono">{{ current_token_masked }}</span>
+    </div>
+  {% else %}
+    <div class="alert alert-error">No token configured. API calls will fail until a token is saved.</div>
+  {% endif %}
+
+  <form method="POST" action="/settings/token">
+    <div class="form-group">
+      <label for="token">New API Token</label>
+      <div class="input-row">
+        <input type="password" id="token" name="token"
+               placeholder="Paste your Prism API token here"
+               autocomplete="off" spellcheck="false">
+        <button type="button" class="btn btn-secondary btn-sm"
+                onclick="toggleVisibility()">Show</button>
+      </div>
+      <p class="hint">The token is stored only in your local database (instance/prism.db) and never sent anywhere except the Prism API.</p>
+    </div>
+    <button type="submit" class="btn btn-primary">Save Token</button>
+    {% if current_token_masked %}
+      <button type="submit" formaction="/settings/token/clear"
+              class="btn btn-secondary"
+              onclick="return confirm('Remove the saved token?')">Clear Token</button>
+    {% endif %}
+  </form>
+</div>
+
+<!-- ── Token source info ──────────────────────────────────────────────────── -->
+<div class="card">
+  <h2>Token Resolution Order</h2>
+  <p style="font-size:.88rem;line-height:1.7;color:#475569;">
+    When making API calls, the token is resolved in this order:
+  </p>
+  <ol style="font-size:.88rem;line-height:2;color:#475569;margin-left:1.5rem;">
+    <li>
+      <strong>Database</strong> — token saved via this settings page
+      {% if token_source == 'db' %}<span style="color:#059669;font-weight:600;">&larr; active</span>{% endif %}
+    </li>
+    <li>
+      <strong>Environment variable</strong> — <code>PRISM_TOKEN</code> in your shell or <code>.env</code> file
+      {% if token_source == 'env' %}<span style="color:#059669;font-weight:600;">&larr; active</span>{% endif %}
+    </li>
+    <li class="text-muted">None — API calls will return 502 errors</li>
+  </ol>
+</div>
+
+<!-- ── Config overview ───────────────────────────────────────────────────── -->
+<div class="card">
+  <h2>Runtime Configuration</h2>
+  <table style="width:100%;font-size:.88rem;border-collapse:collapse;">
+    <thead>
+      <tr style="background:#f8fafc;">
+        <th style="text-align:left;padding:.5rem .75rem;border-bottom:1px solid #e2e8f0;">Setting</th>
+        <th style="text-align:left;padding:.5rem .75rem;border-bottom:1px solid #e2e8f0;">Value</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for key, val in config_rows %}
+      <tr>
+        <td style="padding:.45rem .75rem;border-bottom:1px solid #f1f5f9;color:#64748b;font-family:monospace;">{{ key }}</td>
+        <td style="padding:.45rem .75rem;border-bottom:1px solid #f1f5f9;font-family:monospace;">{{ val }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+function toggleVisibility() {
+  const inp = document.getElementById('token');
+  const btn = inp.nextElementSibling;
+  if (inp.type === 'password') { inp.type = 'text'; btn.textContent = 'Hide'; }
+  else                         { inp.type = 'password'; btn.textContent = 'Show'; }
+}
+</script>
+{% endblock %}
