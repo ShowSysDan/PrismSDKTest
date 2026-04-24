@@ -129,6 +129,8 @@ def events_list():
         (str(today), str(today), str(end)),
     ).fetchall()
 
+    import json as _json
+
     events = []
     for row in rows:
         e = dict(row)
@@ -136,6 +138,13 @@ def events_list():
         status = e.get("event_status")
         e["status_label"] = _STATUS.get(status, "UNKNOWN")
         e["status_color"] = _STATUS_COLOR.get(status, "#94a3b8")
+
+        # Parse dates_json for per-date start/end times
+        try:
+            dates = _json.loads(e.get("dates_json") or "[]")
+        except Exception:
+            dates = []
+        e["dates"] = dates
         events.append(e)
 
     return render_template(

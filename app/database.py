@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS events (
     event_created_date  TEXT,
     age_limit           TEXT,
     ticketing_url       TEXT,
+    dates_json          TEXT,           -- JSON [{date,allDay,startTime,endTime,stageName},...]
     raw_json            TEXT,
     synced_at           TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (venue_id) REFERENCES venues(id)
@@ -132,6 +133,11 @@ def init_db(db_path: str) -> None:
     """Create tables if they don't exist."""
     conn = get_db(db_path)
     conn.executescript(_DDL)
+    # Additive migrations for existing databases
+    try:
+        conn.execute("ALTER TABLE events ADD COLUMN dates_json TEXT")
+    except Exception:
+        pass  # column already exists
     conn.commit()
     conn.close()
 
@@ -228,8 +234,8 @@ def upsert_event(conn: sqlite3.Connection, event: dict) -> None:
              date_range_string, venue_id, venue_name, venue_address, venue_city,
              venue_state, stage_names, is_archived, is_rental, tour_name,
              number_of_shows, capacity, event_last_updated, event_created_date,
-             age_limit, ticketing_url, raw_json, synced_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, datetime('now'))
+             age_limit, ticketing_url, dates_json, raw_json, synced_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, datetime('now'))
         ON CONFLICT(id) DO UPDATE SET
             name                = excluded.name,
             event_status        = excluded.event_status,
@@ -252,6 +258,7 @@ def upsert_event(conn: sqlite3.Connection, event: dict) -> None:
             event_created_date  = excluded.event_created_date,
             age_limit           = excluded.age_limit,
             ticketing_url       = excluded.ticketing_url,
+            dates_json          = excluded.dates_json,
             raw_json            = excluded.raw_json,
             synced_at           = excluded.synced_at
         """,
@@ -278,6 +285,7 @@ def upsert_event(conn: sqlite3.Connection, event: dict) -> None:
             _date_str(event.get("event_created_date")),
             event.get("age_limit"),
             event.get("ticketing_url"),
+            json.dumps(event.get("dates") or []),
             json.dumps(event),
         ),
     )

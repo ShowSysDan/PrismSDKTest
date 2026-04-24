@@ -217,10 +217,22 @@
           data-stage="{{ e.stage_names or '' }}"
           data-status="{{ e.status_label or '' }}">
         <td class="date-col">
-          {{ e.first_date or '—' }}
-          {% if e.last_date and e.last_date != e.first_date %}
-            <br><span style="color:#94a3b8;">→ {{ e.last_date }}</span>
-          {% endif %}
+          {% for d in e.dates %}
+            <div style="{% if not loop.first %}margin-top:.35rem;padding-top:.35rem;border-top:1px solid #f1f5f9;{% endif %}">
+              <span style="color:#64748b;font-size:.78rem;">{{ d.date }}</span><br>
+              {% if d.allDay %}
+                <span style="color:#94a3b8;font-size:.78rem;">all day</span>
+              {% else %}
+                <strong>{{ d.startTime or '—' }}</strong>
+                {% if d.endTime %} – <strong>{{ d.endTime }}</strong>{% endif %}
+              {% endif %}
+            </div>
+          {% else %}
+            {{ e.first_date or '—' }}
+            {% if e.last_date and e.last_date != e.first_date %}
+              <br><span style="color:#94a3b8;">→ {{ e.last_date }}</span>
+            {% endif %}
+          {% endfor %}
         </td>
         <td class="name-col">{{ e.name }}</td>
         <td class="stage-col">{{ e.stage_names or '—' }}</td>
