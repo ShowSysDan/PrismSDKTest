@@ -19,8 +19,9 @@ build/
 *.egg
 
 # Flask / instance
-instance/prism.db
 instance/*.db
+instance/*.db-shm
+instance/*.db-wal
 
 # Node.js
 node_scripts/node_modules/

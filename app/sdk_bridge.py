@@ -69,7 +69,7 @@ def _call(script_name: str, args: dict | None = None, timeout: int | None = None
     if not os.path.isfile(script_path):
         raise SDKError(f"Bridge script not found: {script_path}")
 
-    cmd = ["node", script_path, json.dumps(args or {})]
+    cmd = ["node", script_name, json.dumps(args or {})]
     effective_timeout = timeout or Config.NODE_TIMEOUT
 
     env = {**os.environ, "PRISM_TOKEN": _resolve_token()}
