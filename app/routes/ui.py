@@ -65,22 +65,29 @@ def index():
     db = get_db(current_app.config["DATABASE_PATH"])
 
     stats = {}
-    for table in ("venues", "events", "run_of_show_items"):
+    for table in ("venues", "stages", "events", "run_of_show_items"):
         row = db.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()
         stats[f"{table}_count"] = row["n"]
+    stats["active_stages_count"] = db.execute(
+        "SELECT COUNT(*) AS n FROM stages WHERE active = 1"
+    ).fetchone()["n"]
 
     last_sync = db.execute("SELECT MAX(synced_at) AS ts FROM events").fetchone()["ts"]
 
     endpoints = [
         ("GET",    "/api/health",                         "Health check & table stats"),
-        ("POST",   "/api/sync/venues",                    "Sync venues from Prism"),
+        ("POST",   "/api/sync/venues",                    "Sync venues + stages from Prism"),
         ("POST",   "/api/sync/events",                    "Sync events from Prism"),
         ("POST",   "/api/sync/run-of-show",               "Sync run of show from Prism"),
-        ("GET",    "/api/venues",                         "List all venues"),
+        ("GET",    "/api/stages",                         "List all stages (child venues)"),
+        ("GET",    "/api/stages/<id>",                    "Single stage"),
+        ("GET",    "/api/stages/<id>/run-of-show",        "Run-of-show items for a stage"),
+        ("GET",    "/api/venues",                         "List parent venues"),
         ("GET",    "/api/venues/<id>",                    "Single venue with stages"),
         ("GET",    "/api/venues/<id>/events",             "Upcoming events at a venue"),
         ("GET",    "/api/events",                         "Upcoming events (next 30 days)"),
-        ("GET",    "/api/events/by-venue",                "Events grouped by venue"),
+        ("GET",    "/api/events/by-stage",                "Events grouped by stage"),
+        ("GET",    "/api/events/by-venue",                "Events grouped by parent venue"),
         ("GET",    "/api/events/<id>",                    "Single event by Prism ID"),
         ("GET",    "/api/run-of-show",                    "Run-of-show items"),
         ("POST",   "/api/run-of-show/items",              "Add local run-of-show item"),

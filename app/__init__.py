@@ -20,12 +20,14 @@ def create_app(config_object: object = Config) -> Flask:
     # Register blueprints
     from .routes.events import events_bp
     from .routes.venues import venues_bp
+    from .routes.stages import stages_bp
     from .routes.run_of_show import ros_bp
     from .routes.sync import sync_bp
     from .routes.ui import ui_bp
 
     app.register_blueprint(events_bp, url_prefix="/api/events")
     app.register_blueprint(venues_bp, url_prefix="/api/venues")
+    app.register_blueprint(stages_bp, url_prefix="/api/stages")
     app.register_blueprint(ros_bp, url_prefix="/api/run-of-show")
     app.register_blueprint(sync_bp, url_prefix="/api/sync")
     app.register_blueprint(ui_bp)  # serves / and /settings
@@ -36,7 +38,7 @@ def create_app(config_object: object = Config) -> Flask:
         from .database import get_db
         db = get_db(app.config["DATABASE_PATH"])
         stats = {}
-        for table in ("venues", "events", "run_of_show_items"):
+        for table in ("venues", "stages", "events", "run_of_show_items"):
             row = db.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()
             stats[f"{table}_count"] = row["n"]
         last_sync = db.execute(
