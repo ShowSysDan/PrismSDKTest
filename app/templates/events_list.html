@@ -208,7 +208,14 @@
     </thead>
     <tbody>
       {% for e in events %}
-      <tr onclick="openRos({{ e.id }}, {{ e.name|tojson }}, {{ (e.first_date or '')|tojson }}, {{ (e.last_date or '')|tojson }}, {{ (e.venue_name or '')|tojson }}, {{ (e.stage_names or '')|tojson }}, {{ (e.status_label or '')|tojson }})">
+      <tr class="event-row"
+          data-id="{{ e.id }}"
+          data-name="{{ e.name|e }}"
+          data-first="{{ e.first_date or '' }}"
+          data-last="{{ e.last_date or '' }}"
+          data-venue="{{ e.venue_name or '' }}"
+          data-stage="{{ e.stage_names or '' }}"
+          data-status="{{ e.status_label or '' }}">
         <td class="date-col">
           {{ e.first_date or '—' }}
           {% if e.last_date and e.last_date != e.first_date %}
@@ -365,5 +372,20 @@ function escHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 }
+
+// ── Wire up row clicks via data attributes (avoids inline-onclick escaping) ──
+document.querySelectorAll('.event-row').forEach(row => {
+  row.addEventListener('click', () => {
+    openRos(
+      parseInt(row.dataset.id, 10),
+      row.dataset.name,
+      row.dataset.first,
+      row.dataset.last,
+      row.dataset.venue,
+      row.dataset.stage,
+      row.dataset.status
+    );
+  });
+});
 </script>
 {% endblock %}
