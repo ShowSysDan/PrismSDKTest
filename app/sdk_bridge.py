@@ -226,3 +226,47 @@ def fetch_run_of_show(
     if event_tag_ids:
         args["eventTagIds"] = event_tag_ids
     return _call("get_run_of_show.js", args)
+
+
+def prism_create_ros_item(
+    event_id: int,
+    title: str,
+    start_time: str,
+    stage_id: int | None = None,
+    duration: int = 0,
+) -> dict:
+    """Create a run-of-show item in Prism via the web API."""
+    return _call("ros_create.js", {
+        "event_id": event_id,
+        "title": title,
+        "start_time": start_time,
+        "stage_id": stage_id,
+        "duration": duration,
+    }, timeout=30)
+
+
+def prism_delete_ros_item(event_id: int, item_id: int) -> dict:
+    """Delete a run-of-show item from Prism."""
+    return _call("ros_delete.js", {
+        "event_id": event_id,
+        "item_id": item_id,
+    }, timeout=30)
+
+
+def prism_update_ros_item(
+    event_id: int,
+    item_id: int,
+    title: str | None = None,
+    start_time: str | None = None,
+    stage_id: int | None = None,
+    duration: int = 0,
+) -> dict:
+    """Update a run-of-show item in Prism."""
+    return _call("ros_update.js", {
+        "event_id": event_id,
+        "item_id": item_id,
+        "title": title,
+        "start_time": start_time,
+        "stage_id": stage_id,
+        "duration": duration,
+    }, timeout=30)
