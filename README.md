@@ -7,6 +7,7 @@ A Python/Flask + SQLite web application that wraps the [Prism FM](https://prism.
 - List all **venues and their stages**
 - Retrieve **start/end times and run-of-show** items for any date range
 - **Write run-of-show items** to a local cache with full duplicate detection
+- Manage your **API token via the web UI** — no file editing required
 
 Data is fetched by calling thin Node.js bridge scripts that wrap the official `@prismfm/prism-sdk` package.  Results are cached in a local SQLite database so the Flask REST API is fast and doesn't hammer the Prism API on every request.
 
@@ -16,9 +17,10 @@ Data is fetched by calling thin Node.js bridge scripts that wrap the official `@
 
 - [Architecture](#architecture)
 - [Prerequisites](#prerequisites)
-- [Installation](#installation)
+- [Installation — complete from git clone](#installation--complete-from-git-clone)
 - [Configuration](#configuration)
 - [Running the app](#running-the-app)
+- [Web UI](#web-ui)
 - [API Reference](#api-reference)
   - [Health check](#health-check)
   - [Sync endpoints](#sync-endpoints)
@@ -35,19 +37,20 @@ Data is fetched by calling thin Node.js bridge scripts that wrap the official `@
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                   Flask REST API                     │
-│  /api/events  /api/venues  /api/run-of-show          │
+│         Browser UI  /  Flask REST API                │
+│  /  /settings  /api/events  /api/venues  /api/ros    │
 └────────────────────┬────────────────────────────────┘
                      │ reads
                      ▼
               ┌─────────────┐
               │  SQLite DB  │  instance/prism.db
-              │  (cache)    │
-              └──────┬──────┘
+              │  (cache +   │  · events, venues, stages
+              │   settings) │  · run_of_show_items
+              └──────┬──────┘  · settings (API token)
                      │ populated by
                      ▼
          ┌──────────────────────────┐
-         │  POST /api/sync/*        │
+         │  POST /api/sync/*        │  (or click Sync in the UI)
          └────────────┬─────────────┘
                       │ subprocess
                       ▼
@@ -76,46 +79,60 @@ Prism event fetches can take 30–60 seconds for large datasets.  Caching in SQL
 
 | Dependency | Minimum version | Notes |
 |------------|----------------|-------|
-| Python     | 3.11           | Uses `str \| None` syntax |
+| Python     | 3.11           | Uses `str \| None` union syntax |
 | Node.js    | 18             | Tested with v22 |
 | npm        | 9              | For installing the Prism SDK |
-| Prism API token | —        | Generate in Prism > Settings > Developer |
+| Prism API token | —        | Generate in Prism → Settings → Developer |
 
 ---
 
-## Installation
+## Installation — complete from git clone
 
-These instructions install everything into a Python virtual environment in your home folder.  Adjust the path if you prefer a different location.
+Follow these steps from a fresh clone to a running server.  Everything is
+installed inside the project's own virtual environment so it won't touch your
+system Python.
 
-### 1. Clone / download the project
+### 1. Clone the repository
 
 ```bash
-# If you haven't already:
 git clone <repo-url> ~/PrismSDKTest
 cd ~/PrismSDKTest
 ```
 
-### 2. Create and activate a Python virtual environment
+### 2. Create a Python virtual environment
 
 ```bash
-python3 -m venv ~/PrismSDKTest/venv
-source ~/PrismSDKTest/venv/bin/activate
+python3 -m venv venv
 ```
 
-> **Tip:** Add `source ~/PrismSDKTest/venv/bin/activate` to your shell profile
-> (`.bashrc` / `.zshrc`) so the venv activates automatically when you open a
-> terminal in this directory.
+### 3. Activate the virtual environment
 
-### 3. Install Python dependencies
+```bash
+source venv/bin/activate
+```
+
+> Add this line to your `~/.bashrc` or `~/.zshrc` if you want the venv to
+> activate automatically whenever you `cd` into the project:
+> ```bash
+> # in ~/.bashrc
+> cd() { builtin cd "$@" && [[ -f venv/bin/activate ]] && source venv/bin/activate; }
+> ```
+
+You should now see `(venv)` at the start of your prompt.  All subsequent
+commands assume the venv is active.
+
+### 4. Install Python dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Install the Node.js SDK
+This installs Flask and python-dotenv — the only two Python dependencies.
 
-The SDK is already extracted in the `prismfm-prism-sdk-1.1.2/` directory.  Run
-`npm install` inside the bridge-scripts folder to link it:
+### 5. Install the Node.js SDK
+
+The Prism SDK is bundled in `prismfm-prism-sdk-1.1.2/`.  Run `npm install`
+inside the bridge-scripts folder to link it into `node_modules`:
 
 ```bash
 cd node_scripts
@@ -123,48 +140,66 @@ npm install
 cd ..
 ```
 
-This creates `node_scripts/node_modules/@prismfm/prism-sdk` — a reference to
-the local SDK package.  No internet connection is required.
+No internet connection is required — the SDK is a pre-compiled local package.
 
-### 5. Configure your environment
+### 6. Set up your environment file
 
 ```bash
 cp .env.example .env
 ```
 
-Open `.env` and set your Prism API token:
+At a minimum, open `.env` and set your Prism API token:
 
 ```dotenv
 PRISM_TOKEN=your-prism-api-token-here
 ```
 
-See [Configuration](#configuration) for all available options.
+See [Configuration](#configuration) for all options.  You can also set the
+token through the **web UI** after the app is running — see [Web UI](#web-ui).
 
-### 6. Create the instance directory
+### 7. Create the instance directory
 
 ```bash
 mkdir -p instance
 ```
 
-The SQLite database (`instance/prism.db`) is created automatically the first
-time the app starts.
+The SQLite database (`instance/prism.db`) is created automatically on first
+startup.
+
+### 8. Start the app
+
+```bash
+python run.py
+```
+
+Open **http://127.0.0.1:5000** in your browser.  The dashboard shows sync
+buttons and links to every API endpoint.
 
 ---
 
 ## Configuration
 
 All configuration is read from environment variables.  The easiest way to set
-them is via a `.env` file in the project root (loaded by `python-dotenv`).
+them is via the `.env` file in the project root (loaded by `python-dotenv` at
+startup).
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PRISM_TOKEN` | *(empty)* | **Required.** Your Prism FM API token. |
+| `PRISM_TOKEN` | *(empty)* | Prism API token — can also be set via the web UI. |
 | `FLASK_DEBUG` | `0` | Set to `1` for hot-reload and detailed error pages. |
 | `SECRET_KEY` | `dev-secret-…` | Flask secret key — change this in production. |
 | `DATABASE_PATH` | `instance/prism.db` | Path to the SQLite file. |
-| `NODE_SCRIPTS_DIR` | `node_scripts` | Directory containing the bridge scripts. |
-| `NODE_TIMEOUT` | `300` | Seconds before a Node.js call is killed (raise for large datasets). |
+| `NODE_SCRIPTS_DIR` | `node_scripts` | Directory containing the JS bridge scripts. |
+| `NODE_TIMEOUT` | `300` | Seconds before a Node.js call is killed. |
 | `DEFAULT_LOOKAHEAD_DAYS` | `30` | Default event window when `days` is not specified. |
+
+### Token resolution order
+
+When making API calls, the token is picked up in this order:
+
+1. **Database** — token saved via the Settings page in the web UI
+2. **Environment variable** — `PRISM_TOKEN` in `.env` or your shell
+3. None — API calls return 502 errors
 
 ### Prism token scopes
 
@@ -180,13 +215,11 @@ The token needs at least these read-only scopes:
 
 ## Running the app
 
-Make sure your venv is active and `.env` is populated, then:
+With the venv active and `.env` populated:
 
 ```bash
 python run.py
 ```
-
-The API is available at `http://127.0.0.1:5000`.
 
 For auto-reload during development:
 
@@ -198,16 +231,38 @@ flask --app run:app run --debug
 
 ---
 
+## Web UI
+
+The app ships with a minimal browser interface at **http://127.0.0.1:5000**.
+
+### Dashboard `/`
+
+- Shows the number of cached venues, events, and run-of-show items
+- One-click **Sync** buttons for venues, events (30 days), and run-of-show
+- Table of every API endpoint with clickable links for GET routes
+
+### Settings `/settings`
+
+- **Set or swap your API token** — paste in a new token and click Save.
+  The token is stored in the local SQLite database and takes effect
+  immediately without a restart.
+- Shows which token source is active (database vs. environment variable)
+- Displays current runtime configuration values
+
+The token is masked in the UI — only the last 6 characters are shown.
+
+---
+
 ## API Reference
 
-All endpoints return `Content-Type: application/json`.
+All `/api/*` endpoints return `Content-Type: application/json`.
 
 ### Health check
 
 #### `GET /api/health`
 
 Quick status check — confirms the app is running, reports token presence, and
-shows the row counts in each table.
+shows row counts for each table.
 
 ```bash
 curl http://localhost:5000/api/health
@@ -232,7 +287,7 @@ curl http://localhost:5000/api/health
 
 Sync endpoints **pull fresh data from the Prism API** and store it in SQLite.
 Call these before querying the read endpoints, and again whenever you want
-up-to-date data.
+up-to-date data.  You can also use the Sync buttons on the dashboard.
 
 #### `POST /api/sync/events`
 
@@ -274,22 +329,13 @@ curl -X POST http://localhost:5000/api/sync/events \
 Fetch venues from Prism (with all stages) and upsert them into the local cache.
 
 ```bash
-# Sync active venues only (default)
 curl -X POST http://localhost:5000/api/sync/venues
-
-# Include inactive venues
-curl -X POST http://localhost:5000/api/sync/venues \
-  -H "Content-Type: application/json" \
-  -d '{"include_inactive": true}'
 ```
 
 **Response**
 
 ```json
-{
-  "synced": 12,
-  "errors": []
-}
+{ "synced": 12, "errors": [] }
 ```
 
 ---
@@ -330,8 +376,8 @@ curl -X POST http://localhost:5000/api/sync/run-of-show \
 
 ### Events
 
-All event read endpoints serve data **from the local SQLite cache**.  Run
-`POST /api/sync/events` first.
+All event read endpoints serve data **from the local SQLite cache**.
+Run `POST /api/sync/events` (or click the Sync button) first.
 
 #### `GET /api/events`
 
@@ -382,7 +428,7 @@ curl "http://localhost:5000/api/events?status=2&status=3"
       "stage_names": "Main Stage",
       "capacity": 500,
       "ticketing_url": "https://...",
-      ...
+      "synced_at": "2025-05-20 10:30:00"
     }
   ]
 }
@@ -392,7 +438,7 @@ curl "http://localhost:5000/api/events?status=2&status=3"
 
 #### `GET /api/events/by-venue`
 
-Events grouped by venue — great for a theatre/schedule overview.
+Events grouped by venue — ideal for a theatre/schedule overview.
 
 ```bash
 curl "http://localhost:5000/api/events/by-venue?days=30&status=2"
@@ -412,11 +458,6 @@ curl "http://localhost:5000/api/events/by-venue?days=30&status=2"
       "venue_state": "CA",
       "event_count": 8,
       "events": [ {...}, {...} ]
-    },
-    {
-      "venue_id": 102,
-      "venue_name": "House of Blues",
-      ...
     }
   ]
 }
@@ -443,10 +484,7 @@ Returns the full cached event object or `404` if not in cache.
 List all cached venues with their stages.
 
 ```bash
-# Active venues only (default)
 curl http://localhost:5000/api/venues
-
-# Include inactive venues
 curl "http://localhost:5000/api/venues?include_inactive=true"
 ```
 
@@ -462,14 +500,10 @@ curl "http://localhost:5000/api/venues?include_inactive=true"
       "active": 1,
       "city": "Los Angeles",
       "state": "CA",
-      "country": "US",
-      "address": "9009 Sunset Blvd",
       "timezone": "America/Los_Angeles",
       "capacity": 500,
-      "currency": "USD",
       "stages": [
-        {"id": 201, "venue_id": 101, "name": "Main Stage", "active": 1, "capacity": 500, "color": "#FF0000"},
-        {"id": 202, "venue_id": 101, "name": "Acoustic Room", "active": 1, "capacity": 150, "color": "#00FF00"}
+        {"id": 201, "venue_id": 101, "name": "Main Stage", "capacity": 500, "color": "#FF0000"}
       ]
     }
   ]
@@ -493,10 +527,6 @@ curl http://localhost:5000/api/venues/101
 Upcoming events at a specific venue.
 
 ```bash
-# Next 30 days
-curl http://localhost:5000/api/venues/101/events
-
-# Confirmed only, next 60 days
 curl "http://localhost:5000/api/venues/101/events?days=60&status=2"
 ```
 
@@ -518,11 +548,8 @@ curl http://localhost:5000/api/run-of-show
 # Custom window
 curl "http://localhost:5000/api/run-of-show?start_date=2025-06-15&end_date=2025-06-15"
 
-# Specific venue
+# Filter by venue
 curl "http://localhost:5000/api/run-of-show?venue_id=101"
-
-# Specific stage
-curl "http://localhost:5000/api/run-of-show?stage_id=201"
 
 # Only locally-written items
 curl "http://localhost:5000/api/run-of-show?source=local"
@@ -571,16 +598,6 @@ curl "http://localhost:5000/api/run-of-show?source=local"
 
 ---
 
-#### `GET /api/run-of-show/<id>`
-
-Single run-of-show item by its local database id.
-
-```bash
-curl http://localhost:5000/api/run-of-show/1
-```
-
----
-
 #### `POST /api/run-of-show/items`
 
 Add a locally-managed run-of-show item.
@@ -592,10 +609,9 @@ Add a locally-managed run-of-show item.
 
 **Duplicate detection**
 
-The endpoint rejects an item if the combination of `event_id` + `title` +
-`occurs_at` + `stage_id` already exists in the database (for both `api` and
-`local` items).  A `409 Conflict` response is returned with the id of the
-existing item so you can retrieve or update it.
+A `409 Conflict` is returned when the combination of `event_id` + `title` +
+`occurs_at` + `stage_id` already exists (for both `api` and `local` items).
+The response includes the `existing_id` so you can fetch or update it.
 
 ```bash
 curl -X POST http://localhost:5000/api/run-of-show/items \
@@ -614,70 +630,42 @@ curl -X POST http://localhost:5000/api/run-of-show/items \
   }'
 ```
 
-**Request body (JSON)**
+**Request body**
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `title` | string | **Yes** | Display name (e.g. "Doors", "Load In") |
-| `occurs_at` | string | **Yes** | ISO datetime (`YYYY-MM-DDThh:mm:ss`) or plain date (`YYYY-MM-DD`) |
-| `event_id` | int | **Yes** | Prism event ID this item belongs to |
+| `occurs_at` | string | **Yes** | ISO datetime or plain date (`YYYY-MM-DD`) |
+| `event_id` | int | **Yes** | Prism event ID |
 | `finishes_at` | string | No | ISO datetime when the item ends |
 | `venue_id` | int | No | Venue ID |
 | `stage_id` | int | No | Stage ID |
-| `event_name` | string | No | Human-readable event name (for display) |
-| `venue_name` | string | No | Human-readable venue name (for display) |
-| `stage_name` | string | No | Human-readable stage name (for display) |
+| `event_name` | string | No | Human-readable event name |
+| `venue_name` | string | No | Human-readable venue name |
+| `stage_name` | string | No | Human-readable stage name |
 | `event_description` | string | No | Free-text notes |
-
-**Responses**
 
 | Code | Meaning |
 |------|---------|
-| 201  | Item created; response body contains the new item |
+| 201  | Created — body contains the new item |
 | 400  | Missing required fields or invalid JSON |
-| 409  | Duplicate — a matching item already exists |
-
-**201 response**
-```json
-{
-  "id": 42,
-  "title": "Load In",
-  "occurs_at": "2025-06-15T14:00:00",
-  "finishes_at": "2025-06-15T16:00:00",
-  "event_id": 1490700,
-  "source": "local",
-  ...
-}
-```
-
-**409 response**
-```json
-{
-  "error": "Duplicate run-of-show item",
-  "detail": "An item with the same event_id, title, occurs_at, and stage_id already exists (id=42).",
-  "existing_id": 42
-}
-```
+| 409  | Duplicate — `existing_id` in body |
 
 ---
 
 #### `DELETE /api/run-of-show/items/<id>`
 
-Delete a locally-created run-of-show item.
-
-Only `source = "local"` items can be deleted this way.  API-sourced items are
-managed by re-syncing the date range.
+Delete a locally-created run-of-show item.  Only `source = "local"` items
+can be deleted this way.
 
 ```bash
 curl -X DELETE http://localhost:5000/api/run-of-show/items/42
 ```
 
-**Responses**
-
 | Code | Meaning |
 |------|---------|
-| 200  | Deleted successfully |
-| 403  | Cannot delete an API-sourced item |
+| 200  | Deleted |
+| 403  | Cannot delete API-sourced items |
 | 404  | Item not found |
 
 ---
@@ -701,21 +689,25 @@ PrismSDKTest/
 ├── prismfm-prism-sdk-1.1.2/       # Prism FM SDK (do not modify)
 │   └── package/
 │       ├── build/dist/index.js    # Compiled, bundled SDK
-│       ├── index.d.ts             # TypeScript type definitions
 │       └── sample-scripts/        # Official usage examples
 │
 ├── node_scripts/                  # Node.js bridge scripts
 │   ├── package.json               # Declares @prismfm/prism-sdk dependency
-│   ├── node_modules/              # (generated by npm install)
+│   ├── node_modules/              # (generated by npm install — git-ignored)
 │   ├── get_events.js              # Calls prism.getEvents()
 │   ├── get_venues.js              # Calls prism.getVenues()
 │   └── get_run_of_show.js         # Calls prism.getRunOfShow()
 │
 ├── app/                           # Flask application package
 │   ├── __init__.py                # App factory, blueprint registration
-│   ├── database.py                # SQLite schema, upsert helpers
+│   ├── database.py                # SQLite schema, upsert & settings helpers
 │   ├── sdk_bridge.py              # Python → Node.js subprocess wrapper
+│   ├── templates/
+│   │   ├── base.html              # Shared nav, CSS layout
+│   │   ├── index.html             # Dashboard
+│   │   └── settings.html          # Token & config settings
 │   └── routes/
+│       ├── ui.py                  # Browser UI: / and /settings
 │       ├── events.py              # GET /api/events/*
 │       ├── venues.py              # GET /api/venues/*
 │       ├── run_of_show.py         # GET+POST+DELETE /api/run-of-show/*
@@ -728,7 +720,7 @@ PrismSDKTest/
 │
 ├── run.py                         # Flask entry point
 ├── config.py                      # Configuration class
-├── requirements.txt               # Python dependencies
+├── requirements.txt               # Python dependencies (Flask, python-dotenv)
 ├── .env.example                   # Environment variable template
 ├── .env                           # Your local config (git-ignored)
 ├── .gitignore
@@ -740,34 +732,34 @@ PrismSDKTest/
 ## Troubleshooting
 
 ### `node executable not found`
-Make sure Node.js ≥ 18 is installed and on your `PATH`.
-
+Make sure Node.js ≥ 18 is installed and on your `PATH`:
 ```bash
 node --version   # should print v18.x.x or higher
 ```
 
-### `PRISM_TOKEN` is empty / auth errors
-- Check that `.env` contains `PRISM_TOKEN=your-token-here`
-- Verify the token has the required scopes (`read-events`, `read-venues`, `read-run-of-show`)
-- Test the token directly: `PRISM_TOKEN=your-token node node_scripts/get_venues.js '{}'`
+### Token not working / 502 errors from sync
+1. Open **http://localhost:5000/settings** and check which source is active.
+2. Paste in your token and click **Save Token**.
+3. Verify the token has the right scopes (`read-events`, `read-venues`, `read-run-of-show`).
+4. Test the token directly:
+   ```bash
+   PRISM_TOKEN=your-token node node_scripts/get_venues.js '{}'
+   ```
 
 ### Sync times out
 Large event datasets can take several minutes.  Increase `NODE_TIMEOUT` in `.env`:
-
 ```dotenv
 NODE_TIMEOUT=600   # 10 minutes
 ```
 
-### `ModuleNotFoundError: No module named 'flask'`
-Your venv is not active.  Run:
-
+### `(venv)` prompt disappeared / `ModuleNotFoundError: No module named 'flask'`
+Your venv is not active:
 ```bash
 source ~/PrismSDKTest/venv/bin/activate
 ```
 
 ### Empty results from read endpoints
-The read endpoints serve from the local SQLite cache.  You must sync first:
-
+Read endpoints serve from the local SQLite cache — you must sync first:
 ```bash
 curl -X POST http://localhost:5000/api/sync/venues
 curl -X POST http://localhost:5000/api/sync/events
@@ -775,10 +767,10 @@ curl -X POST http://localhost:5000/api/sync/run-of-show \
   -H "Content-Type: application/json" \
   -d '{"start_date":"2025-06-01","end_date":"2025-06-30"}'
 ```
+Or use the **Sync** buttons on the dashboard at **http://localhost:5000**.
 
 ### Database errors after a schema change
-Delete the database file and restart — it will be recreated automatically:
-
+Delete the database file and restart — it is recreated automatically:
 ```bash
 rm instance/prism.db
 python run.py

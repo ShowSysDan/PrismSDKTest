@@ -15,6 +15,23 @@ from typing import Any
 from config import Config
 
 
+def _resolve_token() -> str:
+    """
+    Return the Prism API token, preferring the value stored in the
+    database settings table over the PRISM_TOKEN environment variable.
+    This lets the UI token override take effect without a restart.
+    """
+    try:
+        from .database import get_db, get_setting
+        db = get_db(Config.DATABASE_PATH)
+        token = get_setting(db, "prism_token")
+        if token:
+            return token
+    except Exception:
+        pass
+    return Config.PRISM_TOKEN
+
+
 class SDKError(Exception):
     """Raised when a Prism SDK bridge script returns a non-zero exit code."""
 
@@ -55,7 +72,7 @@ def _call(script_name: str, args: dict | None = None, timeout: int | None = None
     cmd = ["node", script_path, json.dumps(args or {})]
     effective_timeout = timeout or Config.NODE_TIMEOUT
 
-    env = {**os.environ, "PRISM_TOKEN": Config.PRISM_TOKEN}
+    env = {**os.environ, "PRISM_TOKEN": _resolve_token()}
 
     try:
         result = subprocess.run(

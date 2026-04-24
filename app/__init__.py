@@ -22,11 +22,13 @@ def create_app(config_object: object = Config) -> Flask:
     from .routes.venues import venues_bp
     from .routes.run_of_show import ros_bp
     from .routes.sync import sync_bp
+    from .routes.ui import ui_bp
 
     app.register_blueprint(events_bp, url_prefix="/api/events")
     app.register_blueprint(venues_bp, url_prefix="/api/venues")
     app.register_blueprint(ros_bp, url_prefix="/api/run-of-show")
     app.register_blueprint(sync_bp, url_prefix="/api/sync")
+    app.register_blueprint(ui_bp)  # serves / and /settings
 
     @app.get("/api/health")
     def health():
@@ -40,11 +42,12 @@ def create_app(config_object: object = Config) -> Flask:
         last_sync = db.execute(
             "SELECT MAX(synced_at) AS ts FROM events"
         ).fetchone()["ts"]
+        from .sdk_bridge import _resolve_token
         return jsonify(
             status="ok",
             table_stats=stats,
             last_events_sync=last_sync,
-            prism_token_set=bool(app.config["PRISM_TOKEN"]),
+            prism_token_set=bool(_resolve_token()),
         )
 
     return app

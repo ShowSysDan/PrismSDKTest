@@ -23,6 +23,12 @@ _DDL = """
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
 
+CREATE TABLE IF NOT EXISTS settings (
+    key        TEXT PRIMARY KEY,
+    value      TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS venues (
     id          INTEGER PRIMARY KEY,
     name        TEXT    NOT NULL,
@@ -128,6 +134,28 @@ def init_db(db_path: str) -> None:
     conn.executescript(_DDL)
     conn.commit()
     conn.close()
+
+
+# ── Settings helpers ──────────────────────────────────────────────────────────
+
+def get_setting(conn: sqlite3.Connection, key: str, default: str = "") -> str:
+    """Return the value for *key* from the settings table, or *default*."""
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return row["value"] if (row and row["value"] is not None) else default
+
+
+def set_setting(conn: sqlite3.Connection, key: str, value: str) -> None:
+    """Upsert a key-value pair in the settings table."""
+    conn.execute(
+        """
+        INSERT INTO settings (key, value, updated_at)
+        VALUES (?, ?, datetime('now'))
+        ON CONFLICT(key) DO UPDATE SET
+            value      = excluded.value,
+            updated_at = excluded.updated_at
+        """,
+        (key, value),
+    )
 
 
 # ── Upsert helpers ────────────────────────────────────────────────────────────
