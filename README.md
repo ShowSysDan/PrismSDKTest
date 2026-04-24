@@ -80,8 +80,8 @@ Prism event fetches can take 30–60 seconds for large datasets.  Caching in SQL
 | Dependency | Minimum version | Notes |
 |------------|----------------|-------|
 | Python     | 3.11           | Uses `str \| None` union syntax |
-| Node.js    | 18             | Tested with v22 |
-| npm        | 9              | For installing the Prism SDK |
+| Node.js    | 18             | Tested with v22; install via nvm (see below) |
+| npm        | 9              | Comes bundled with Node.js |
 | Prism API token | —        | Generate in Prism → Settings → Developer |
 
 ---
@@ -90,7 +90,7 @@ Prism event fetches can take 30–60 seconds for large datasets.  Caching in SQL
 
 Follow these steps from a fresh clone to a running server.  Everything is
 installed inside the project's own virtual environment so it won't touch your
-system Python.
+system Python or Node.js.
 
 ### 1. Clone the repository
 
@@ -99,13 +99,45 @@ git clone <repo-url> ~/PrismSDKTest
 cd ~/PrismSDKTest
 ```
 
-### 2. Create a Python virtual environment
+### 2. Install Node.js (if not already installed)
+
+Check first — you may already have it:
+
+```bash
+node --version   # should print v18.x.x or higher
+npm --version
+```
+
+If either command says `command not found`, install Node.js via **nvm**
+(Node Version Manager).  nvm installs entirely in your home folder — no
+`sudo` required:
+
+```bash
+# Download and run the nvm installer
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+
+# Reload your shell so the nvm command is available
+source ~/.bashrc      # or: source ~/.zshrc  if you use zsh
+
+# Install Node.js 22 (LTS) and set it as the default
+nvm install 22
+nvm use 22
+
+# Confirm
+node --version   # v22.x.x
+npm --version    # 10.x.x
+```
+
+> **Tip:** Add `nvm use 22` to your `~/.bashrc` / `~/.zshrc` so the right
+> Node version is selected automatically in every new terminal.
+
+### 3. Create a Python virtual environment
 
 ```bash
 python3 -m venv venv
 ```
 
-### 3. Activate the virtual environment
+### 4. Activate the virtual environment
 
 ```bash
 source venv/bin/activate
@@ -121,7 +153,7 @@ source venv/bin/activate
 You should now see `(venv)` at the start of your prompt.  All subsequent
 commands assume the venv is active.
 
-### 4. Install Python dependencies
+### 5. Install Python dependencies
 
 ```bash
 pip install -r requirements.txt
@@ -129,7 +161,7 @@ pip install -r requirements.txt
 
 This installs Flask and python-dotenv — the only two Python dependencies.
 
-### 5. Install the Node.js SDK
+### 6. Install the Node.js SDK
 
 The Prism SDK is bundled in `prismfm-prism-sdk-1.1.2/`.  Run `npm install`
 inside the bridge-scripts folder to link it into `node_modules`:
@@ -142,7 +174,7 @@ cd ..
 
 No internet connection is required — the SDK is a pre-compiled local package.
 
-### 6. Set up your environment file
+### 7. Set up your environment file
 
 ```bash
 cp .env.example .env
@@ -157,7 +189,7 @@ PRISM_TOKEN=your-prism-api-token-here
 See [Configuration](#configuration) for all options.  You can also set the
 token through the **web UI** after the app is running — see [Web UI](#web-ui).
 
-### 7. Create the instance directory
+### 8. Create the instance directory
 
 ```bash
 mkdir -p instance
@@ -166,7 +198,7 @@ mkdir -p instance
 The SQLite database (`instance/prism.db`) is created automatically on first
 startup.
 
-### 8. Start the app
+### 9. Start the app
 
 ```bash
 python run.py
@@ -731,11 +763,23 @@ PrismSDKTest/
 
 ## Troubleshooting
 
-### `node executable not found`
-Make sure Node.js ≥ 18 is installed and on your `PATH`:
+### `node: command not found` or `npm: command not found`
+Node.js is not installed (or nvm hasn't been sourced in the current shell).
+
 ```bash
-node --version   # should print v18.x.x or higher
+# Install nvm (one-time)
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+source ~/.bashrc      # reload shell
+
+# Install and activate Node 22
+nvm install 22
+nvm use 22
+
+node --version   # v22.x.x
+npm --version    # 10.x.x
 ```
+
+Then re-run `cd node_scripts && npm install && cd ..`.
 
 ### Token not working / 502 errors from sync
 1. Open **http://localhost:6161/settings** and check which source is active.
