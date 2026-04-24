@@ -161,18 +161,25 @@ pip install -r requirements.txt
 
 This installs Flask and python-dotenv — the only two Python dependencies.
 
-### 6. Install the Node.js SDK
+### 6. Install the Node.js SDK dependencies
 
-The Prism SDK is bundled in `prismfm-prism-sdk-1.1.2/`.  Run `npm install`
-inside the bridge-scripts folder to link it into `node_modules`:
+Two `npm install` steps are required — one for the SDK's own dependencies,
+and one for the bridge scripts that call it:
 
 ```bash
+# 1. Install the SDK's runtime dependencies (lodash, apollo-client, etc.)
+cd prismfm-prism-sdk-1.1.2/package
+npm install
+cd ../..
+
+# 2. Link the SDK into the bridge scripts
 cd node_scripts
 npm install
 cd ..
 ```
 
-No internet connection is required — the SDK is a pre-compiled local package.
+Both installs are local — no internet connection is required beyond the initial
+package fetch.
 
 ### 7. Set up your environment file
 
