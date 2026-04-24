@@ -103,6 +103,50 @@ def index():
     )
 
 
+# ── Events list ───────────────────────────────────────────────────────────────
+
+@ui_bp.get("/events")
+def events_list():
+    db = get_db(current_app.config["DATABASE_PATH"])
+    today = date.today()
+    end = today + timedelta(days=30)
+
+    _STATUS = {0: "HOLD", 2: "CONFIRMED", 3: "IN_SETTLEMENT", 4: "SETTLED"}
+    _STATUS_COLOR = {
+        0: "#f59e0b",
+        2: "#059669",
+        3: "#2563eb",
+        4: "#64748b",
+    }
+
+    rows = db.execute(
+        """
+        SELECT * FROM events
+        WHERE (first_date >= ? OR last_date >= ?)
+          AND first_date <= ?
+        ORDER BY first_date ASC, name ASC
+        """,
+        (str(today), str(today), str(end)),
+    ).fetchall()
+
+    events = []
+    for row in rows:
+        e = dict(row)
+        e.pop("raw_json", None)
+        status = e.get("event_status")
+        e["status_label"] = _STATUS.get(status, "UNKNOWN")
+        e["status_color"] = _STATUS_COLOR.get(status, "#94a3b8")
+        events.append(e)
+
+    return render_template(
+        "events_list.html",
+        events=events,
+        window_start=str(today),
+        window_end=str(end),
+        **_token_context(),
+    )
+
+
 # ── Settings ──────────────────────────────────────────────────────────────────
 
 @ui_bp.get("/settings")
