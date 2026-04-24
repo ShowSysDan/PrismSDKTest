@@ -54,6 +54,8 @@ function summarizeEvent(event) {
     event_created_date: event.eventCreatedDate,
     age_limit: event.ageLimit,
     ticketing_url: event.ticketingURL,
+    // Per-date schedule: [{date, allDay, startTime, endTime, stageName}, ...]
+    dates: Array.isArray(event.dates) ? event.dates : [],
   };
 }
 
