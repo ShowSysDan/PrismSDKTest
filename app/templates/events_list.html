@@ -214,6 +214,7 @@
           data-first="{{ e.first_date or '' }}"
           data-last="{{ e.last_date or '' }}"
           data-venue="{{ e.venue_name or '' }}"
+          data-venue-id="{{ e.venue_id or '' }}"
           data-stage="{{ e.stage_names or '' }}"
           data-status="{{ e.status_label or '' }}">
         <td class="date-col">
@@ -259,65 +260,153 @@
         <h3 id="modal-event-name">Run of Show</h3>
         <div class="meta" id="modal-meta"></div>
       </div>
-      <button class="modal-close" onclick="closeRos()" aria-label="Close">&times;</button>
+      <div style="display:flex;gap:.5rem;align-items:center;flex-shrink:0;">
+        <button class="btn btn-secondary btn-sm" id="btn-edit" onclick="enterEditMode()" style="display:none;">Edit</button>
+        <button class="btn btn-primary btn-sm" id="btn-save" onclick="saveToPrism()" style="display:none;">Save to Prism</button>
+        <button class="btn btn-secondary btn-sm" id="btn-cancel" onclick="cancelEdit()" style="display:none;">Cancel</button>
+        <button class="modal-close" onclick="closeRos()" aria-label="Close">&times;</button>
+      </div>
     </div>
+    <div id="modal-save-status" style="display:none;padding:.5rem 1.5rem;font-size:.82rem;background:#f8fafc;border-bottom:1px solid #e2e8f0;"></div>
     <div class="modal-body" id="modal-body">
       <div class="modal-loading">Loading&hellip;</div>
     </div>
   </div>
 </div>
 
+<style>
+  /* ── Edit-mode table cells ─────────────────────────────────────────────── */
+  .ros-table input.cell-input {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    padding: .2rem .4rem;
+    font-size: .83rem;
+    font-family: inherit;
+    background: #fff;
+  }
+  .ros-table input.cell-input:focus { outline: none; border-color: #7c3aed; box-shadow: 0 0 0 2px rgba(124,58,237,.15); }
+  .ros-table select.cell-select {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    padding: .2rem .3rem;
+    font-size: .82rem;
+    background: #fff;
+  }
+  .ros-table select.cell-select:focus { outline: none; border-color: #7c3aed; }
+  .del-btn {
+    background: none;
+    border: none;
+    color: #dc2626;
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: .1rem .35rem;
+    border-radius: 4px;
+    line-height: 1;
+  }
+  .del-btn:hover { background: #fee2e2; }
+  tr.deleted-row td { opacity: .4; text-decoration: line-through; }
+  tr.new-row td { background: #f0fdf4; }
+  .add-row-btn {
+    width: 100%;
+    margin-top: .75rem;
+    padding: .45rem;
+    border: 2px dashed #cbd5e1;
+    border-radius: 6px;
+    background: none;
+    color: #64748b;
+    font-size: .85rem;
+    cursor: pointer;
+    transition: border-color .15s, color .15s;
+  }
+  .add-row-btn:hover { border-color: #7c3aed; color: #7c3aed; }
+</style>
+
 <script>
-// ── 24-hour time formatter ────────────────────────────────────────────────────
+// ── State ─────────────────────────────────────────────────────────────────────
+let _rosEventId   = null;   // current event ID
+let _rosEventDate = '';     // YYYY-MM-DD of the event (for occurs_at)
+let _rosVenueId   = null;   // for stage lookup
+let _rosItems     = [];     // fetched items (immutable reference for cancel)
+let _editMode     = false;
+let _deletedIds   = new Set();   // prism_ids marked for deletion
+let _editedItems  = {};          // prism_id -> {title, start_time, stage_id, stage_name}
+let _newItems     = [];          // [{_tmpId, title, start_time, stage_id, stage_name}]
+let _venueStages  = [];          // [{id, name}] loaded on edit
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function escHtml(str) {
+  return String(str || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 function fmt24(isoStr) {
   if (!isoStr) return null;
-  // Parse as local time by replacing any trailing Z or offset before formatting
-  const s = isoStr.replace('Z', '').replace(/[+-]\d{2}:\d{2}$/, '');
+  const s = isoStr.replace('Z','').replace(/[+-]\d{2}:\d{2}$/,'');
   const d = new Date(s);
-  if (isNaN(d)) return isoStr;
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mm = String(d.getMinutes()).padStart(2, '0');
-  return hh + ':' + mm;
+  if (isNaN(d)) return isoStr.slice(11,16) || isoStr;
+  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
 }
 
-function fmtDate(isoStr) {
-  if (!isoStr) return '';
-  return isoStr.slice(0, 10);
-}
-
-// Duration in "Xh Ym" from two ISO datetimes
 function fmtDur(start, end) {
   if (!start || !end) return '';
-  const s = new Date(start.replace('Z','').replace(/[+-]\d{2}:\d{2}$/, ''));
-  const e = new Date(end.replace('Z','').replace(/[+-]\d{2}:\d{2}$/, ''));
-  const diffMin = Math.round((e - s) / 60000);
-  if (diffMin <= 0) return '';
-  const h = Math.floor(diffMin / 60);
-  const m = diffMin % 60;
-  return (h ? h + 'h ' : '') + (m ? m + 'm' : '');
+  const s = new Date(start.replace('Z','').replace(/[+-]\d{2}:\d{2}$/,''));
+  const e = new Date(end.replace('Z','').replace(/[+-]\d{2}:\d{2}$/,''));
+  const m = Math.round((e - s) / 60000);
+  if (m <= 0) return '';
+  const h = Math.floor(m / 60), mn = m % 60;
+  return (h ? h + 'h ' : '') + (mn ? mn + 'm' : '');
+}
+
+function setStatus(msg, isError) {
+  const el = document.getElementById('modal-save-status');
+  el.style.display = msg ? 'block' : 'none';
+  el.style.color = isError ? '#dc2626' : '#059669';
+  el.textContent = msg;
+}
+
+function showBtn(id, visible) {
+  document.getElementById(id).style.display = visible ? '' : 'none';
 }
 
 // ── Modal open/close ──────────────────────────────────────────────────────────
-function openRos(eventId, name, firstDate, lastDate, venueName, stageName, statusLabel) {
-  const backdrop = document.getElementById('modal-backdrop');
-  document.getElementById('modal-event-name').textContent = name;
+function openRos(eventId, name, firstDate, lastDate, venueName, stageName, statusLabel, venueId) {
+  _rosEventId   = eventId;
+  _rosEventDate = (firstDate || '').slice(0, 10);
+  _rosVenueId   = venueId || null;
+  _editMode     = false;
+  _deletedIds   = new Set();
+  _editedItems  = {};
+  _newItems     = [];
+  _venueStages  = [];
 
+  document.getElementById('modal-event-name').textContent = name;
   const datePart = firstDate && lastDate && lastDate !== firstDate
-    ? firstDate + ' → ' + lastDate
-    : (firstDate || '');
+    ? firstDate.slice(0,10) + ' → ' + lastDate.slice(0,10)
+    : (firstDate || '').slice(0,10);
   const parts = [datePart, stageName || '', venueName || ''].filter(Boolean);
   document.getElementById('modal-meta').textContent = parts.join('  ·  ');
 
+  setStatus('');
+  showBtn('btn-edit', false);
+  showBtn('btn-save', false);
+  showBtn('btn-cancel', false);
+
   document.getElementById('modal-body').innerHTML = '<div class="modal-loading">Loading…</div>';
-  backdrop.classList.add('open');
+  document.getElementById('modal-backdrop').classList.add('open');
   document.addEventListener('keydown', escListener);
 
   fetch('/api/run-of-show?event_id=' + eventId)
     .then(r => r.ok ? r.json() : Promise.reject(r.status))
-    .then(data => renderRos(data.items || []))
+    .then(data => {
+      _rosItems = data.items || [];
+      renderViewMode();
+      showBtn('btn-edit', true);
+    })
     .catch(err => {
       document.getElementById('modal-body').innerHTML =
-        '<div class="modal-error">Failed to load run-of-show data (error ' + err + ').</div>';
+        '<div class="modal-error">Failed to load run-of-show (error ' + err + ').</div>';
     });
 }
 
@@ -325,67 +414,267 @@ function closeRos() {
   document.getElementById('modal-backdrop').classList.remove('open');
   document.removeEventListener('keydown', escListener);
 }
+function closeIfBackdrop(e) { if (e.target === document.getElementById('modal-backdrop')) closeRos(); }
+function escListener(e)      { if (e.key === 'Escape') closeRos(); }
 
-function closeIfBackdrop(event) {
-  if (event.target === document.getElementById('modal-backdrop')) closeRos();
-}
-
-function escListener(e) {
-  if (e.key === 'Escape') closeRos();
-}
-
-// ── Render run-of-show items ─────────────────────────────────────────────────
-function renderRos(items) {
+// ── View mode ─────────────────────────────────────────────────────────────────
+function renderViewMode() {
   const body = document.getElementById('modal-body');
-  if (!items.length) {
+  if (!_rosItems.length) {
     body.innerHTML = '<div class="modal-empty">No run-of-show items found for this event.<br>' +
-      '<small style="color:#94a3b8;">Sync Run of Show from the Dashboard to populate.</small></div>';
+      '<small style="color:#94a3b8;">Click Edit to add items, or Sync Run of Show from the Dashboard.</small></div>';
     return;
   }
 
-  const rows = items.map(item => {
+  const rows = _rosItems.map(item => {
     const start = fmt24(item.occurs_at);
     const end   = fmt24(item.finishes_at);
     const dur   = fmtDur(item.occurs_at, item.finishes_at);
-
-    const timeStr = start
-      ? (end ? start + ' – ' + end : start)
-      : '—';
-
-    const srcClass = item.source === 'local' ? 'local' : 'api';
-    const srcLabel = item.source === 'local' ? 'local' : 'api';
-
+    const timeStr = start ? (end ? start + ' – ' + end : start) : '—';
+    const srcCls = item.source === 'local' ? 'local' : 'api';
     return '<tr>' +
-      '<td class="time-col">' + timeStr + '</td>' +
+      '<td class="time-col">' + escHtml(timeStr) + '</td>' +
       '<td class="title-col">' + escHtml(item.title) + '</td>' +
       '<td class="stage-col">' + escHtml(item.stage_name || '') + '</td>' +
       '<td class="dur-col">' + escHtml(dur) + '</td>' +
-      '<td><span class="source-pill ' + srcClass + '">' + srcLabel + '</span></td>' +
+      '<td><span class="source-pill ' + srcCls + '">' + srcCls + '</span></td>' +
       '</tr>';
   }).join('');
 
   body.innerHTML =
-    '<table class="ros-table">' +
-      '<thead><tr>' +
-        '<th>Time</th>' +
-        '<th>Item</th>' +
-        '<th>Stage</th>' +
-        '<th>Duration</th>' +
-        '<th>Source</th>' +
-      '</tr></thead>' +
-      '<tbody>' + rows + '</tbody>' +
-    '</table>';
+    '<table class="ros-table"><thead><tr>' +
+      '<th>Time</th><th>Item</th><th>Stage</th><th>Duration</th><th>Source</th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
-function escHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+// ── Edit mode ─────────────────────────────────────────────────────────────────
+function enterEditMode() {
+  _editMode = true;
+  _deletedIds = new Set();
+  _editedItems = {};
+  _newItems = [];
+  setStatus('');
+  showBtn('btn-edit', false);
+  showBtn('btn-save', true);
+  showBtn('btn-cancel', true);
+
+  // Load stages for the venue to populate dropdowns
+  const stagePromise = _rosVenueId
+    ? fetch('/api/stages?venue_id=' + _rosVenueId)
+        .then(r => r.ok ? r.json() : { stages: [] })
+        .then(d => { _venueStages = d.stages || []; })
+        .catch(() => { _venueStages = []; })
+    : Promise.resolve();
+
+  stagePromise.then(renderEditMode);
 }
 
-// ── Wire up row clicks via data attributes (avoids inline-onclick escaping) ──
+function stageOptions(selectedId) {
+  let opts = '<option value="">— no stage —</option>';
+  _venueStages.forEach(s => {
+    const sel = s.id == selectedId ? ' selected' : '';
+    opts += '<option value="' + s.id + '"' + sel + '>' + escHtml(s.name) + '</option>';
+  });
+  return opts;
+}
+
+function renderEditMode() {
+  const body = document.getElementById('modal-body');
+
+  const rows = _rosItems.map((item, idx) => {
+    const time  = fmt24(item.occurs_at) || '';
+    const isDel = _deletedIds.has(item.prism_id);
+    const rowCls = isDel ? 'deleted-row' : '';
+    return '<tr class="' + rowCls + '" data-prism-id="' + (item.prism_id||'') + '" data-idx="' + idx + '">' +
+      '<td class="time-col">' +
+        (isDel
+          ? escHtml(time)
+          : '<input class="cell-input" type="text" placeholder="HH:MM" maxlength="5" value="' + escHtml(time) + '" ' +
+            'oninput="trackEdit(\'time\',' + idx + ',this.value)">') +
+      '</td>' +
+      '<td class="title-col">' +
+        (isDel
+          ? escHtml(item.title)
+          : '<input class="cell-input" type="text" value="' + escHtml(item.title) + '" ' +
+            'oninput="trackEdit(\'title\',' + idx + ',this.value)">') +
+      '</td>' +
+      '<td class="stage-col">' +
+        (isDel
+          ? escHtml(item.stage_name||'')
+          : '<select class="cell-select" onchange="trackEdit(\'stage\',' + idx + ',this.value,this.options[this.selectedIndex].text)">' +
+            stageOptions(item.stage_id) + '</select>') +
+      '</td>' +
+      '<td>' +
+        (isDel
+          ? '<button class="btn btn-sm" style="font-size:.72rem;padding:.15rem .5rem;" onclick="undoDelete(' + idx + ')">Undo</button>'
+          : '<button class="del-btn" title="Mark for deletion" onclick="markDelete(' + idx + ')">×</button>') +
+      '</td>' +
+      '</tr>';
+  }).join('');
+
+  // New item rows
+  const newRows = _newItems.map((ni, ni_idx) => {
+    return '<tr class="new-row" data-new-idx="' + ni_idx + '">' +
+      '<td class="time-col"><input class="cell-input" type="text" placeholder="HH:MM" maxlength="5" value="' + escHtml(ni.start_time||'') + '" ' +
+        'oninput="trackNew(\'time\',' + ni_idx + ',this.value)"></td>' +
+      '<td class="title-col"><input class="cell-input" type="text" placeholder="Title" value="' + escHtml(ni.title||'') + '" ' +
+        'oninput="trackNew(\'title\',' + ni_idx + ',this.value)"></td>' +
+      '<td class="stage-col"><select class="cell-select" onchange="trackNew(\'stage\',' + ni_idx + ',this.value,this.options[this.selectedIndex].text)">' +
+        stageOptions(ni.stage_id) + '</select></td>' +
+      '<td><button class="del-btn" onclick="removeNew(' + ni_idx + ')">×</button></td>' +
+      '</tr>';
+  }).join('');
+
+  body.innerHTML =
+    '<table class="ros-table"><thead><tr>' +
+      '<th>Time</th><th>Title</th><th>Stage</th><th></th>' +
+    '</tr></thead><tbody>' + rows + newRows + '</tbody></table>' +
+    '<button class="add-row-btn" onclick="addNewRow()">+ Add Item</button>';
+}
+
+function trackEdit(field, idx, value, stageName) {
+  const item = _rosItems[idx];
+  if (!item.prism_id) return; // local-only items can't be pushed to Prism
+  if (!_editedItems[item.prism_id]) {
+    _editedItems[item.prism_id] = {
+      title: item.title,
+      start_time: fmt24(item.occurs_at) || '',
+      stage_id: item.stage_id,
+      stage_name: item.stage_name || '',
+    };
+  }
+  if (field === 'title')  _editedItems[item.prism_id].title      = value;
+  if (field === 'time')   _editedItems[item.prism_id].start_time = value;
+  if (field === 'stage') {
+    _editedItems[item.prism_id].stage_id   = value ? parseInt(value, 10) : null;
+    _editedItems[item.prism_id].stage_name = stageName || '';
+  }
+}
+
+function trackNew(field, ni_idx, value, stageName) {
+  if (field === 'title') _newItems[ni_idx].title      = value;
+  if (field === 'time')  _newItems[ni_idx].start_time = value;
+  if (field === 'stage') {
+    _newItems[ni_idx].stage_id   = value ? parseInt(value, 10) : null;
+    _newItems[ni_idx].stage_name = stageName || '';
+  }
+}
+
+function markDelete(idx) {
+  const pid = _rosItems[idx].prism_id;
+  if (!pid) { setStatus('Local-only items cannot be pushed; delete them via the local API.', true); return; }
+  _deletedIds.add(pid);
+  renderEditMode();
+}
+
+function undoDelete(idx) {
+  const pid = _rosItems[idx].prism_id;
+  _deletedIds.delete(pid);
+  renderEditMode();
+}
+
+let _tmpCounter = 0;
+function addNewRow() {
+  _newItems.push({ _tmpId: ++_tmpCounter, title: '', start_time: '', stage_id: null, stage_name: '' });
+  renderEditMode();
+}
+
+function removeNew(ni_idx) {
+  _newItems.splice(ni_idx, 1);
+  renderEditMode();
+}
+
+function cancelEdit() {
+  _editMode = false;
+  _deletedIds = new Set();
+  _editedItems = {};
+  _newItems = [];
+  setStatus('');
+  showBtn('btn-edit', true);
+  showBtn('btn-save', false);
+  showBtn('btn-cancel', false);
+  renderViewMode();
+}
+
+// ── Save to Prism ─────────────────────────────────────────────────────────────
+async function saveToPrism() {
+  const btn = document.getElementById('btn-save');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  setStatus('');
+
+  const errors = [];
+  let changed = 0;
+
+  // 1. Deletions
+  for (const prismId of _deletedIds) {
+    try {
+      const r = await fetch('/api/run-of-show/prism-write/' + prismId, { method: 'DELETE' });
+      if (!r.ok) { const d = await r.json(); errors.push('Delete ' + prismId + ': ' + (d.error||r.status)); }
+      else changed++;
+    } catch(e) { errors.push('Delete ' + prismId + ': ' + e.message); }
+  }
+
+  // 2. Updates
+  for (const [prismIdStr, fields] of Object.entries(_editedItems)) {
+    if (_deletedIds.has(parseInt(prismIdStr, 10))) continue; // was deleted, skip
+    try {
+      const r = await fetch('/api/run-of-show/prism-write/' + prismIdStr, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(fields),
+      });
+      if (!r.ok) { const d = await r.json(); errors.push('Update ' + prismIdStr + ': ' + (d.error||r.status)); }
+      else changed++;
+    } catch(e) { errors.push('Update ' + prismIdStr + ': ' + e.message); }
+  }
+
+  // 3. Creates
+  for (const ni of _newItems) {
+    if (!ni.title || !ni.start_time) { errors.push('New item "' + (ni.title||'(blank)') + '" needs a title and time.'); continue; }
+    try {
+      const r = await fetch('/api/run-of-show/prism-write', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          event_id:   _rosEventId,
+          title:      ni.title,
+          start_time: ni.start_time,
+          stage_id:   ni.stage_id,
+          stage_name: ni.stage_name,
+          event_date: _rosEventDate,
+        }),
+      });
+      if (!r.ok) { const d = await r.json(); errors.push('Create "' + ni.title + '": ' + (d.error||r.status)); }
+      else changed++;
+    } catch(e) { errors.push('Create "' + ni.title + '": ' + e.message); }
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Save to Prism';
+
+  if (errors.length) {
+    setStatus('⚠ ' + errors.join(' | '), true);
+  } else {
+    setStatus('✓ Saved ' + changed + ' change' + (changed !== 1 ? 's' : '') + ' to Prism.', false);
+    // Reload items
+    const resp = await fetch('/api/run-of-show?event_id=' + _rosEventId);
+    if (resp.ok) {
+      const d = await resp.json();
+      _rosItems = d.items || [];
+    }
+    _editMode = false;
+    _deletedIds = new Set();
+    _editedItems = {};
+    _newItems = [];
+    showBtn('btn-edit', true);
+    showBtn('btn-save', false);
+    showBtn('btn-cancel', false);
+    renderViewMode();
+  }
+}
+
+// ── Wire up event-row clicks ──────────────────────────────────────────────────
 document.querySelectorAll('.event-row').forEach(row => {
   row.addEventListener('click', () => {
     openRos(
@@ -395,7 +684,8 @@ document.querySelectorAll('.event-row').forEach(row => {
       row.dataset.last,
       row.dataset.venue,
       row.dataset.stage,
-      row.dataset.status
+      row.dataset.status,
+      row.dataset.venueId ? parseInt(row.dataset.venueId, 10) : null
     );
   });
 });

@@ -3,6 +3,9 @@ Run-of-show endpoints.
 
 GET    /api/run-of-show              - Query items from cache
 GET    /api/run-of-show/<id>         - Single item by local DB id
+POST   /api/run-of-show/prism-write  - Create item in Prism + sync locally
+PATCH  /api/run-of-show/prism-write/<prism_id> - Update item in Prism + local
+DELETE /api/run-of-show/prism-write/<prism_id> - Delete from Prism + local
 POST   /api/run-of-show/items        - Add a local run-of-show item (duplicate-safe)
 DELETE /api/run-of-show/items/<id>   - Delete a locally-created item
 """
@@ -12,6 +15,7 @@ from datetime import date, timedelta
 from flask import Blueprint, current_app, jsonify, request
 
 from ..database import get_db, upsert_ros_item
+from ..sdk_bridge import SDKError, prism_create_ros_item, prism_delete_ros_item, prism_update_ros_item
 
 ros_bp = Blueprint("run_of_show", __name__)
 
@@ -247,3 +251,152 @@ def delete_item(item_id: int):
     db.execute("DELETE FROM run_of_show_items WHERE id = ?", (item_id,))
     db.commit()
     return jsonify(deleted=True, id=item_id)
+
+
+# ── Prism write endpoints ─────────────────────────────────────────────────────
+
+@ros_bp.post("/prism-write")
+def prism_create():
+    """
+    Create a run-of-show item in Prism and sync to the local cache.
+
+    Request body (JSON)
+    -------------------
+    event_id   : int   [required]
+    title      : str   [required]
+    start_time : str   [required]  "HH:MM" or "HH:MM:SS"
+    stage_id   : int   [optional]
+    stage_name : str   [optional]  for local cache only
+    event_date : str   [optional]  YYYY-MM-DD used to build occurs_at
+    duration   : int   [optional]  seconds (default 0)
+    """
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify(error="Request body must be JSON"), 400
+
+    missing = [f for f in ("event_id", "title", "start_time") if not data.get(f)]
+    if missing:
+        return jsonify(error="Missing required fields", missing_fields=missing), 400
+
+    try:
+        prism_item = prism_create_ros_item(
+            event_id=int(data["event_id"]),
+            title=str(data["title"]).strip(),
+            start_time=str(data["start_time"]),
+            stage_id=data.get("stage_id"),
+            duration=data.get("duration", 0),
+        )
+    except SDKError as exc:
+        return jsonify(error=str(exc)), 502
+
+    # Build occurs_at from the event date + start_time
+    event_date = data.get("event_date", "")
+    raw_time = prism_item.get("start_time") or data.get("start_time", "")
+    if len(raw_time) == 5:
+        raw_time += ":00"
+    occurs_at = f"{event_date}T{raw_time}" if event_date else raw_time
+
+    db = get_db(current_app.config["DATABASE_PATH"])
+    ros_item = {
+        "id": prism_item.get("id"),
+        "title": prism_item.get("title") or data["title"],
+        "occurs_at": occurs_at,
+        "finishes_at": None,
+        "event": {"id": int(data["event_id"]), "name": data.get("event_name", "")},
+        "stage": {"id": prism_item.get("stage_id") or data.get("stage_id"),
+                  "name": data.get("stage_name", "")}
+               if (prism_item.get("stage_id") or data.get("stage_id")) else None,
+        "venue": None,
+        "source": "api",
+    }
+    upsert_ros_item(db, ros_item)
+    db.commit()
+    return jsonify(prism_item), 201
+
+
+@ros_bp.patch("/prism-write/<int:prism_id>")
+def prism_update(prism_id: int):
+    """
+    Update a run-of-show item in Prism and refresh the local cache row.
+
+    Request body (JSON)
+    -------------------
+    title      : str   [optional]
+    start_time : str   [optional]  "HH:MM" or "HH:MM:SS"
+    stage_id   : int   [optional]
+    stage_name : str   [optional]
+    duration   : int   [optional]
+    """
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify(error="Request body must be JSON"), 400
+
+    db = get_db(current_app.config["DATABASE_PATH"])
+    row = db.execute(
+        "SELECT * FROM run_of_show_items WHERE prism_id = ?", (prism_id,)
+    ).fetchone()
+    if row is None:
+        return jsonify(error=f"No cached item with Prism ID {prism_id}"), 404
+
+    event_id = row["event_id"]
+    try:
+        prism_item = prism_update_ros_item(
+            event_id=event_id,
+            item_id=prism_id,
+            title=data.get("title"),
+            start_time=data.get("start_time"),
+            stage_id=data.get("stage_id"),
+            duration=data.get("duration", 0),
+        )
+    except SDKError as exc:
+        return jsonify(error=str(exc)), 502
+
+    # Patch local cache
+    new_title = data.get("title") or row["title"]
+    new_stage_id = data.get("stage_id", row["stage_id"])
+    new_stage_name = data.get("stage_name", row["stage_name"])
+    # Rebuild occurs_at if start_time changed
+    raw_time = data.get("start_time")
+    if raw_time:
+        if len(raw_time) == 5:
+            raw_time += ":00"
+        base_date = (row["occurs_at"] or "")[:10]
+        new_occurs_at = f"{base_date}T{raw_time}" if base_date else raw_time
+    else:
+        new_occurs_at = row["occurs_at"]
+
+    db.execute(
+        """UPDATE run_of_show_items
+           SET title = ?, stage_id = ?, stage_name = ?, occurs_at = ?,
+               synced_at = datetime('now')
+           WHERE prism_id = ?""",
+        (new_title, new_stage_id, new_stage_name, new_occurs_at, prism_id),
+    )
+    db.commit()
+    return jsonify(prism_item)
+
+
+@ros_bp.delete("/prism-write/<int:prism_id>")
+def prism_delete(prism_id: int):
+    """
+    Delete a run-of-show item from Prism and remove it from the local cache.
+    """
+    db = get_db(current_app.config["DATABASE_PATH"])
+    row = db.execute(
+        "SELECT id, event_id FROM run_of_show_items WHERE prism_id = ?", (prism_id,)
+    ).fetchone()
+    if row is None:
+        return jsonify(error=f"No cached item with Prism ID {prism_id}"), 404
+
+    event_id = row["event_id"]
+    if not event_id:
+        return jsonify(error="Cannot delete: item has no event_id in local cache"), 400
+
+    try:
+        prism_delete_ros_item(event_id=event_id, item_id=prism_id)
+    except SDKError as exc:
+        return jsonify(error=str(exc)), 502
+
+    db.execute("DELETE FROM run_of_show_items WHERE prism_id = ?", (prism_id,))
+    db.commit()
+    return jsonify(deleted=True, prism_id=prism_id)
