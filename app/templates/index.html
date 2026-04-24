@@ -15,8 +15,8 @@
 <!-- ── Stats ──────────────────────────────────────────────────────────────── -->
 <div class="stat-grid">
   <div class="stat-box">
-    <div class="num">{{ stats.venues_count }}</div>
-    <div class="lbl">Venues</div>
+    <div class="num">{{ stats.active_stages_count }}</div>
+    <div class="lbl">Active Stages</div>
   </div>
   <div class="stat-box">
     <div class="num">{{ stats.events_count }}</div>
@@ -27,6 +27,9 @@
     <div class="lbl">Run of Show Items</div>
   </div>
 </div>
+<p class="text-muted" style="font-size:.8rem;margin-top:-.75rem;margin-bottom:1.5rem;">
+  {{ stats.venues_count }} parent venue(s) · {{ stats.stages_count }} total stages
+</p>
 
 {% if last_sync %}
 <p class="text-muted" style="font-size:.82rem;margin-bottom:1.5rem;">Last events sync: {{ last_sync }}</p>

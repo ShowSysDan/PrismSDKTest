@@ -155,6 +155,7 @@
 <nav>
   <a class="brand" href="/">Prism FM SDK</a>
   <a href="/" {% if request.endpoint == 'ui.index' %}class="active"{% endif %}>Dashboard</a>
+  <a href="/events" {% if request.endpoint == 'ui.events_list' %}class="active"{% endif %}>Events</a>
   <a href="/settings" {% if request.endpoint == 'ui.settings' %}class="active"{% endif %}>Settings</a>
   <div class="spacer"></div>
   {% if token_set %}
