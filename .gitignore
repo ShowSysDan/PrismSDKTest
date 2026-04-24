@@ -26,6 +26,8 @@ instance/*.db-wal
 # Node.js
 node_scripts/node_modules/
 node_scripts/package-lock.json
+prismfm-prism-sdk-1.1.2/package/node_modules/
+prismfm-prism-sdk-1.1.2/package/package-lock.json
 
 # IDE
 .vscode/
