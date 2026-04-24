@@ -1,0 +1,9 @@
+{
+  "name": "prism-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Node.js bridge scripts for calling the Prism FM SDK from Python",
+  "dependencies": {
+    "@prismfm/prism-sdk": "file:../prismfm-prism-sdk-1.1.2/package"
+  }
+}
