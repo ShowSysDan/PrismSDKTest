@@ -172,7 +172,7 @@ startup.
 python run.py
 ```
 
-Open **http://127.0.0.1:5000** in your browser.  The dashboard shows sync
+Open **http://127.0.0.1:6161** in your browser.  The dashboard shows sync
 buttons and links to every API endpoint.
 
 ---
@@ -233,7 +233,7 @@ flask --app run:app run --debug
 
 ## Web UI
 
-The app ships with a minimal browser interface at **http://127.0.0.1:5000**.
+The app ships with a minimal browser interface at **http://127.0.0.1:6161**.
 
 ### Dashboard `/`
 
@@ -265,7 +265,7 @@ Quick status check — confirms the app is running, reports token presence, and
 shows row counts for each table.
 
 ```bash
-curl http://localhost:5000/api/health
+curl http://localhost:6161/api/health
 ```
 
 ```json
@@ -295,10 +295,10 @@ Fetch events from Prism for a date window and upsert them into the local cache.
 
 ```bash
 # Sync the next 30 days (default)
-curl -X POST http://localhost:5000/api/sync/events
+curl -X POST http://localhost:6161/api/sync/events
 
 # Sync the next 60 days, confirmed events only
-curl -X POST http://localhost:5000/api/sync/events \
+curl -X POST http://localhost:6161/api/sync/events \
   -H "Content-Type: application/json" \
   -d '{"days": 60, "status": [2]}'
 ```
@@ -329,7 +329,7 @@ curl -X POST http://localhost:5000/api/sync/events \
 Fetch venues from Prism (with all stages) and upsert them into the local cache.
 
 ```bash
-curl -X POST http://localhost:5000/api/sync/venues
+curl -X POST http://localhost:6161/api/sync/venues
 ```
 
 **Response**
@@ -347,7 +347,7 @@ are deleted first so stale items don't accumulate.  Locally-written items are
 **never** overwritten by a sync.
 
 ```bash
-curl -X POST http://localhost:5000/api/sync/run-of-show \
+curl -X POST http://localhost:6161/api/sync/run-of-show \
   -H "Content-Type: application/json" \
   -d '{"start_date": "2025-06-01", "end_date": "2025-06-30"}'
 ```
@@ -385,16 +385,16 @@ List upcoming events.
 
 ```bash
 # Next 30 days (default)
-curl http://localhost:5000/api/events
+curl http://localhost:6161/api/events
 
 # Next 60 days, confirmed events only
-curl "http://localhost:5000/api/events?days=60&status=2"
+curl "http://localhost:6161/api/events?days=60&status=2"
 
 # Events at a specific venue
-curl "http://localhost:5000/api/events?venue_id=123"
+curl "http://localhost:6161/api/events?venue_id=123"
 
 # Multiple statuses
-curl "http://localhost:5000/api/events?status=2&status=3"
+curl "http://localhost:6161/api/events?status=2&status=3"
 ```
 
 **Query parameters**
@@ -441,7 +441,7 @@ curl "http://localhost:5000/api/events?status=2&status=3"
 Events grouped by venue — ideal for a theatre/schedule overview.
 
 ```bash
-curl "http://localhost:5000/api/events/by-venue?days=30&status=2"
+curl "http://localhost:6161/api/events/by-venue?days=30&status=2"
 ```
 
 **Response**
@@ -470,7 +470,7 @@ curl "http://localhost:5000/api/events/by-venue?days=30&status=2"
 Single event by its Prism ID.
 
 ```bash
-curl http://localhost:5000/api/events/1490700
+curl http://localhost:6161/api/events/1490700
 ```
 
 Returns the full cached event object or `404` if not in cache.
@@ -484,8 +484,8 @@ Returns the full cached event object or `404` if not in cache.
 List all cached venues with their stages.
 
 ```bash
-curl http://localhost:5000/api/venues
-curl "http://localhost:5000/api/venues?include_inactive=true"
+curl http://localhost:6161/api/venues
+curl "http://localhost:6161/api/venues?include_inactive=true"
 ```
 
 **Response**
@@ -517,7 +517,7 @@ curl "http://localhost:5000/api/venues?include_inactive=true"
 Single venue with its stages.
 
 ```bash
-curl http://localhost:5000/api/venues/101
+curl http://localhost:6161/api/venues/101
 ```
 
 ---
@@ -527,7 +527,7 @@ curl http://localhost:5000/api/venues/101
 Upcoming events at a specific venue.
 
 ```bash
-curl "http://localhost:5000/api/venues/101/events?days=60&status=2"
+curl "http://localhost:6161/api/venues/101/events?days=60&status=2"
 ```
 
 ---
@@ -543,16 +543,16 @@ List run-of-show items from the local cache.
 
 ```bash
 # Default: today through today + 30 days
-curl http://localhost:5000/api/run-of-show
+curl http://localhost:6161/api/run-of-show
 
 # Custom window
-curl "http://localhost:5000/api/run-of-show?start_date=2025-06-15&end_date=2025-06-15"
+curl "http://localhost:6161/api/run-of-show?start_date=2025-06-15&end_date=2025-06-15"
 
 # Filter by venue
-curl "http://localhost:5000/api/run-of-show?venue_id=101"
+curl "http://localhost:6161/api/run-of-show?venue_id=101"
 
 # Only locally-written items
-curl "http://localhost:5000/api/run-of-show?source=local"
+curl "http://localhost:6161/api/run-of-show?source=local"
 ```
 
 **Query parameters**
@@ -614,7 +614,7 @@ A `409 Conflict` is returned when the combination of `event_id` + `title` +
 The response includes the `existing_id` so you can fetch or update it.
 
 ```bash
-curl -X POST http://localhost:5000/api/run-of-show/items \
+curl -X POST http://localhost:6161/api/run-of-show/items \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Load In",
@@ -659,7 +659,7 @@ Delete a locally-created run-of-show item.  Only `source = "local"` items
 can be deleted this way.
 
 ```bash
-curl -X DELETE http://localhost:5000/api/run-of-show/items/42
+curl -X DELETE http://localhost:6161/api/run-of-show/items/42
 ```
 
 | Code | Meaning |
@@ -738,7 +738,7 @@ node --version   # should print v18.x.x or higher
 ```
 
 ### Token not working / 502 errors from sync
-1. Open **http://localhost:5000/settings** and check which source is active.
+1. Open **http://localhost:6161/settings** and check which source is active.
 2. Paste in your token and click **Save Token**.
 3. Verify the token has the right scopes (`read-events`, `read-venues`, `read-run-of-show`).
 4. Test the token directly:
@@ -761,13 +761,13 @@ source ~/PrismSDKTest/venv/bin/activate
 ### Empty results from read endpoints
 Read endpoints serve from the local SQLite cache — you must sync first:
 ```bash
-curl -X POST http://localhost:5000/api/sync/venues
-curl -X POST http://localhost:5000/api/sync/events
-curl -X POST http://localhost:5000/api/sync/run-of-show \
+curl -X POST http://localhost:6161/api/sync/venues
+curl -X POST http://localhost:6161/api/sync/events
+curl -X POST http://localhost:6161/api/sync/run-of-show \
   -H "Content-Type: application/json" \
   -d '{"start_date":"2025-06-01","end_date":"2025-06-30"}'
 ```
-Or use the **Sync** buttons on the dashboard at **http://localhost:5000**.
+Or use the **Sync** buttons on the dashboard at **http://localhost:6161**.
 
 ### Database errors after a schema change
 Delete the database file and restart — it is recreated automatically:
